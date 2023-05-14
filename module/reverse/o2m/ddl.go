@@ -42,6 +42,9 @@ type DDL struct {
 	TableCheckKeys     []string `json:"table_check_keys""`
 	TableForeignKeys   []string `json:"table_foreign_keys"`
 	TableCompatibleDDL []string `json:"table_compatible_ddl"`
+    TablePartitions    []string `json:"table_partitions"`
+    TablePartitionKeys string   `json:"table_partition_key"`
+    TablePartitionType string   `json:"table_partition_type"`
 }
 
 func (d *DDL) Write(w *reverse.Write) (string, error) {
@@ -164,6 +167,7 @@ func (d *DDL) GenDDLStructure() ([]string, []string) {
 		checkKeyDDL   []string
 		foreignKeyDDL []string
 	)
+    // fmt.Printf("------------------- I am here \n")
 
 	// 表 with 主键
 	var structDDL string
@@ -172,17 +176,43 @@ func (d *DDL) GenDDLStructure() ([]string, []string) {
 			d.TablePrefix,
 			strings.Join(d.TableColumns, ",\n"),
 			strings.Join(d.TableKeys, ",\n"))
+        // fmt.Printf("Primary key: <%s> \n", structDDL)
 	} else {
 		structDDL = fmt.Sprintf("%s (\n%s\n)",
 			d.TablePrefix,
 			strings.Join(d.TableColumns, ",\n"))
 	}
 
+    partDDL := ""
+    if len(d.TablePartitions) > 0 {
+        fmt.Printf("The partitions are: <%#v> \n", d.TablePartitions)
+        fmt.Printf("The partitions type is : <%#v> \n", d.TablePartitionType)
+        fmt.Printf("The partitions keys is : <%#v> \n", d.TablePartitionKeys)
+
+
+        if d.TablePartitionType == "LIST" {
+             partDDL = fmt.Sprintf("PARTITION BY LIST COLUMNS(%s) (%s)", d.TablePartitionKeys, strings.Join(d.TablePartitions, ", "))
+        } else if d.TablePartitionType == "RANGE" {
+
+        }
+        tableDDL = tableDDL + partDDL 
+        // fmt.Printf(" ******** The partitio DDLn: %s \n", partDDL)
+    }
+
 	if strings.EqualFold(d.TableComment, "") {
-		tableDDL = fmt.Sprintf("%s %s;", structDDL, d.TableSuffix)
+        if partDDL == "" {
+		    tableDDL = fmt.Sprintf("%s %s;", structDDL, d.TableSuffix)
+        }else {
+		    tableDDL = fmt.Sprintf("%s %s %s;", structDDL, d.TableSuffix, partDDL)
+        }
 	} else {
-		tableDDL = fmt.Sprintf("%s %s %s;", structDDL, d.TableSuffix, d.TableComment)
+        if partDDL == "" {
+		    tableDDL = fmt.Sprintf("%s %s %s;", structDDL, d.TableSuffix, d.TableComment)
+        }else {
+		    tableDDL = fmt.Sprintf("%s %s %s %s;", structDDL, d.TableSuffix, d.TableComment, partDDL)
+        }
 	}
+
 
 	zap.L().Info("reverse oracle table structure",
 		zap.String("schema", d.TargetSchemaName),
@@ -194,14 +224,18 @@ func (d *DDL) GenDDLStructure() ([]string, []string) {
 	// foreign and check key sql ddl
 	if len(d.TableForeignKeys) > 0 {
 		for _, fk := range d.TableForeignKeys {
+            // fmt.Printf("There is foreign keys here : <%s> \n", fk );
+            // eleFK := strings.Split(fk, " ")
+            // tiFK := strings.Join(eleFK[2:], " ")
 			fkSQL := fmt.Sprintf("ALTER TABLE `%s`.`%s` ADD %s;",
-				d.TargetSchemaName, d.TargetTableName, fk)
+			 	d.TargetSchemaName, d.TargetTableName, fk)
 			zap.L().Info("reverse oracle table foreign key",
 				zap.String("schema", d.TargetSchemaName),
 				zap.String("table", d.TargetTableName),
 				zap.String("fk sql", fkSQL))
 			foreignKeyDDL = append(foreignKeyDDL, fkSQL)
 		}
+        //fmt.Printf("foreign keys: <%#v> \n", foreignKeyDDL)
 	}
 	if len(d.TableCheckKeys) > 0 {
 		for _, ck := range d.TableCheckKeys {

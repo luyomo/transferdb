@@ -32,16 +32,17 @@ type Rule struct {
 }
 
 type Info struct {
-	SourceTableDDL    string              `json:"-"` // 忽略
-	PrimaryKeyINFO    []map[string]string `json:"primary_key_info"`
-	UniqueKeyINFO     []map[string]string `json:"unique_key_info"`
-	ForeignKeyINFO    []map[string]string `json:"foreign_key_info"`
-	CheckKeyINFO      []map[string]string `json:"check_key_info"`
-	UniqueIndexINFO   []map[string]string `json:"unique_index_info"`
-	NormalIndexINFO   []map[string]string `json:"normal_index_info"`
-	TableCommentINFO  []map[string]string `json:"table_comment_info"`
-	TableColumnINFO   []map[string]string `json:"table_column_info"`
-	ColumnCommentINFO []map[string]string `json:"column_comment_info"`
+	SourceTableDDL        string              `json:"-"` // 忽略
+	PrimaryKeyINFO        []map[string]string `json:"primary_key_info"`
+	UniqueKeyINFO         []map[string]string `json:"unique_key_info"`
+	ForeignKeyINFO        []map[string]string `json:"foreign_key_info"`
+	CheckKeyINFO          []map[string]string `json:"check_key_info"`
+	UniqueIndexINFO       []map[string]string `json:"unique_index_info"`
+	NormalIndexINFO       []map[string]string `json:"normal_index_info"`
+	TableCommentINFO      []map[string]string `json:"table_comment_info"`
+	TableColumnINFO       []map[string]string `json:"table_column_info"`
+	ColumnCommentINFO     []map[string]string `json:"column_comment_info"`
+    TablePartitionsInfo   []map[string]string `json:"table_partition_info"`
 }
 
 func (r *Rule) GenCreateTableDDL() (interface{}, error) {
@@ -100,6 +101,9 @@ func (r *Rule) GenCreateTableDDL() (interface{}, error) {
 		TableCheckKeys:     checkKeys,
 		TableForeignKeys:   foreignKeys,
 		TableCompatibleDDL: compatibleDDL,
+        TablePartitions:    r.GetPartitions(),
+        TablePartitionKeys: r.GetPartKeys(),
+        TablePartitionType: r.GetPartType(),
 	}, nil
 }
 
@@ -772,22 +776,22 @@ func (r *Rule) GenTableColumn() (tableColumns []string, err error) {
 			}
 		} else {
 			switch {
-			case columnCollation != "" && comment != "" && dataDefault != "":
+			case columnCollation != "" && comment != "" && (dataDefault != "" && dataDefault != "NULL"):
 				tableColumns = append(tableColumns, fmt.Sprintf("`%s` %s COLLATE %s %s DEFAULT %s COMMENT %s",
 					rowCol["COLUMN_NAME"], columnType, columnCollation, nullable, dataDefault, comment))
-			case columnCollation != "" && comment != "" && dataDefault == "":
+			case columnCollation != "" && comment != "" && (dataDefault == "" || dataDefault == "NULL"):
 				tableColumns = append(tableColumns, fmt.Sprintf("`%s` %s COLLATE %s %s COMMENT %s", rowCol["COLUMN_NAME"], columnType, columnCollation, nullable, comment))
-			case columnCollation != "" && comment == "" && dataDefault != "":
+			case columnCollation != "" && comment == "" && (dataDefault != "" && dataDefault != "NULL"):
 				tableColumns = append(tableColumns, fmt.Sprintf("`%s` %s COLLATE %s %s DEFAULT %s", rowCol["COLUMN_NAME"], columnType, columnCollation, nullable, dataDefault))
-			case columnCollation != "" && comment == "" && dataDefault == "":
+			case columnCollation != "" && comment == "" && (dataDefault == "" || dataDefault == "NULL"):
 				tableColumns = append(tableColumns, fmt.Sprintf("`%s` %s COLLATE %s %s", rowCol["COLUMN_NAME"], columnType, columnCollation, nullable))
-			case columnCollation == "" && comment != "" && dataDefault != "":
+			case columnCollation == "" && comment != "" && (dataDefault != "" && dataDefault != "NULL"):
 				tableColumns = append(tableColumns, fmt.Sprintf("`%s` %s %s DEFAULT %s COMMENT %s", rowCol["COLUMN_NAME"], columnType, nullable, dataDefault, comment))
-			case columnCollation == "" && comment != "" && dataDefault == "":
+			case columnCollation == "" && comment != "" && (dataDefault == "" || dataDefault == "NULL" ):
 				tableColumns = append(tableColumns, fmt.Sprintf("`%s` %s %s COMMENT %s", rowCol["COLUMN_NAME"], columnType, nullable, comment))
-			case columnCollation == "" && comment == "" && dataDefault != "":
+			case columnCollation == "" && comment == "" && (dataDefault != "" && dataDefault != "NULL"):
 				tableColumns = append(tableColumns, fmt.Sprintf("`%s` %s %s DEFAULT %s", rowCol["COLUMN_NAME"], columnType, nullable, dataDefault))
-			case columnCollation == "" && comment == "" && dataDefault == "":
+			case columnCollation == "" && comment == "" && (dataDefault == "" || dataDefault == "NULL" ):
 				tableColumns = append(tableColumns, fmt.Sprintf("`%s` %s %s", rowCol["COLUMN_NAME"], columnType, nullable))
 			default:
 				return tableColumns, fmt.Errorf("error on gen oracle schema table column meta without nullable, rule: %v", r.String())
@@ -821,6 +825,36 @@ func (r *Rule) GenTableName() string {
 		return r.TargetTableName
 	}
 	return r.SourceTableName
+}
+
+func (r *Rule) GetPartKeys() string {
+    if len(r.TablePartitionsInfo) > 0 {
+        return r.TablePartitionsInfo[0]["COLUMN_LIST"]
+    }
+
+    return ""
+}
+
+func (r *Rule) GetPartType() string {
+    if len(r.TablePartitionsInfo) > 0 {
+        return r.TablePartitionsInfo[0]["PARTITIONING_TYPE"]
+    }
+
+    return ""
+}
+
+func (r *Rule) GetPartitions() []string {
+    var listParts []string
+
+    if len(r.TablePartitionsInfo) > 0 {
+
+        if r.GetPartType() == "LIST" {
+            for _, part := range r.TablePartitionsInfo {
+                listParts = append(listParts, fmt.Sprintf("PARTITION %s VALUES IN (%s)", part["PARTITION_NAME"], part["HIGH_VALUE"]))
+            }
+        }
+    }
+    return listParts
 }
 
 func (r *Rule) String() string {

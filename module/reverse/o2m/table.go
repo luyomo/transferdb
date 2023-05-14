@@ -259,6 +259,11 @@ func (t *Table) GetTableColumnComment() ([]map[string]string, error) {
 	return t.Oracle.GetOracleSchemaTableColumnComment(t.SourceSchemaName, t.SourceTableName)
 }
 
+func (t *Table) GetTablePartitons() ([]map[string]string, error) {
+	// Get all table partitions
+	return t.Oracle.GetOracleTablePartitions(t.SourceSchemaName, t.SourceTableName)
+}
+
 func (t *Table) GetTableInfo() (interface{}, error) {
 	primaryKey, err := t.GetTablePrimaryKey()
 	if err != nil {
@@ -292,6 +297,11 @@ func (t *Table) GetTableInfo() (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+    tablePartitionsInfo, err := t.GetTablePartitons()
+	if err != nil {
+		return nil, err
+	}
+    // fmt.Printf("The partition info: <%#v> \n", tablePartitionsInfo)
 	// M2O -> mysql/tidb need, because oracle comment sql special
 	// O2M -> it is not need
 	columnComment, err := t.GetTableColumnComment()
@@ -305,16 +315,17 @@ func (t *Table) GetTableInfo() (interface{}, error) {
 	}
 
 	return &Info{
-		SourceTableDDL:    ddl,
-		PrimaryKeyINFO:    primaryKey,
-		UniqueKeyINFO:     uniqueKey,
-		ForeignKeyINFO:    foreignKey,
-		CheckKeyINFO:      checkKey,
-		UniqueIndexINFO:   uniqueIndex,
-		NormalIndexINFO:   normalIndex,
-		TableCommentINFO:  tableComment,
-		TableColumnINFO:   columnMeta,
-		ColumnCommentINFO: columnComment,
+		SourceTableDDL:      ddl,
+		PrimaryKeyINFO:      primaryKey,
+		UniqueKeyINFO:       uniqueKey,
+		ForeignKeyINFO:      foreignKey,
+		CheckKeyINFO:        checkKey,
+		UniqueIndexINFO:     uniqueIndex,
+		NormalIndexINFO:     normalIndex,
+		TableCommentINFO:    tableComment,
+		TableColumnINFO:     columnMeta,
+		ColumnCommentINFO:   columnComment,
+        TablePartitionsInfo: tablePartitionsInfo,
 	}, nil
 }
 

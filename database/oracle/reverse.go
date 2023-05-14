@@ -702,3 +702,34 @@ func (o *Oracle) GetOracleTableOriginDDL(schemaName, tableName, tableType string
 
 	return ddl, nil
 }
+
+func (o *Oracle) GetOracleTablePartitions(schemaName string, tableName string) ([]map[string]string, error) {
+	querySQL := fmt.Sprintf(` 
+         SELECT PARTITIONING_TYPE, PARTITION_NAME, HIGH_VALUE, t3.COLUMN_LIST 
+          FROM DBA_PART_TABLES t1 
+    INNER JOIN ALL_TAB_PARTITIONS t2 
+            ON t1.OWNER = t2.TABLE_OWNER 
+           AND t1.TABLE_NAME = t2.TABLE_NAME
+    INNER JOIN (
+                select OWNER, NAME AS TABLE_NAME
+                     , LISTAGG(column_name, ',') WITHIN GROUP(ORDER BY COLUMN_POSITION) AS COLUMN_LIST 
+                  FROM DBA_PART_KEY_COLUMNS 
+                 WHERE OWNER = '%s'
+                   AND NAME = '%s'
+              GROUP BY OWNER, NAME) t3
+           ON t1.OWNER = t3.OWNER 
+          AND t1.TABLE_NAME = t3.TABLE_NAME
+        WHERE t1.OWNER = '%s'
+          AND t1.TABLE_NAME = '%s' 
+    `,
+		strings.ToUpper(schemaName),
+		strings.ToUpper(tableName),
+		strings.ToUpper(schemaName),
+		strings.ToUpper(tableName))
+	_, res, err := Query(o.Ctx, o.OracleDB, querySQL)
+	if err != nil {
+		return res, err
+	}
+	return res, nil
+}
+
